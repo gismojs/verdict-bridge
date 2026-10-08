@@ -122,4 +122,3 @@ MIT — use it, fork it, build on it.
 ---
 
 *Built by Jochen Schröder. Proven in production on a 135-desk SaaS platform.*  
-*Interested in a hosted version? → [verdict.dev](https://verdict.dev) (waitlist)*
