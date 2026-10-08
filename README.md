@@ -27,10 +27,10 @@ Verdict enforces a structural separation between developer and tester agents —
 
 Built and battle-tested on a 135-desk vertical SaaS platform:
 
-- **220 fixes implemented in 12 hours** at 8% test coverage
-- **277+ protocol messages** exchanged between 4 agents
+- **~18 fixes implemented** in a recent run
+- **~23 protocol messages** exchanged between agents
 - Zero "yeah looks good" approvals — every fix required hard evidence
-- Horst (GPT tester) rejected multiple submissions for missing test logs, unverified commits, and hand-copied code instead of actual runtime tests
+- The GPT tester rejected multiple submissions for missing test logs, unverified commits, and hand-copied code instead of actual runtime tests
 
 ## How It Works
 
