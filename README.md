@@ -25,7 +25,7 @@ Verdict enforces a structural separation between developer and tester agents —
 
 ## Real-World Results
 
-Built and battle-tested on [Sektura](https://sektura.com), a 135-desk vertical SaaS platform:
+Built and battle-tested on a 135-desk vertical SaaS platform:
 
 - **220 fixes implemented in 12 hours** at 8% test coverage
 - **277+ protocol messages** exchanged between 4 agents
