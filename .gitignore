@@ -5,5 +5,7 @@ __pycache__/
 *.sqlite3
 *.bak
 *.json
+!handoff-contract-v1.schema.json
+!handoff-policy.example.json
 !example-config.json
 .env

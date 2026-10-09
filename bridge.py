@@ -16,6 +16,7 @@ import sys
 import time
 from typing import Any, Literal
 from uuid import UUID, uuid4
+from handoff_contract import validate_report
 
 AGENTS = ("codex", "claude", "codex_hetzner", "claude_hetzner")
 AGENT_INFO = {
@@ -212,6 +213,7 @@ class Store:
             raise ValueError(f"commit_sha is required for {kind}")
         if reply_to:
             reply_to = uuid_text(reply_to, "reply_to")
+        validate_report(body, kind, commit_sha, self.agent)
         payload = json.dumps([recipient, kind, subject, body, commit_sha, reply_to], ensure_ascii=False)
         digest = hashlib.sha256(payload.encode()).hexdigest()
         with self.connection() as db:

@@ -14,7 +14,7 @@ Single-model QA loops create a false sense of confidence.
 
 ## The Solution
 
-Verdict enforces a structural separation between developer and tester agents — using **different models from different vendors**, connected through a strict accountability protocol.
+Verdict Bridge enforces a structural separation between developer and tester agents — using **different models from different vendors**, connected through a strict accountability protocol.
 
 - A Claude instance writes and fixes code
 - A GPT instance tests and challenges every fix
@@ -43,6 +43,7 @@ Built and battle-tested on a 135-desk vertical SaaS platform:
 ├──────────────┴──────────────────────────────────────┤
 │              Verdict Bridge                          │
 │  - Persistent message store (SQLite)                │
+│  - Structured JSON handoffs (v1.1)                  │
 │  - Commit SHA verification                          │
 │  - Task lease system (no parallel work collisions)  │
 │  - Human-in-the-loop merge gate                     │
@@ -54,12 +55,12 @@ Built and battle-tested on a 135-desk vertical SaaS platform:
 
 | Kind | Who sends it | Meaning |
 |---|---|---|
-| `finding` | Tester | Bug or issue found — requires commit SHA |
-| `fix_ready` | Developer | Fix committed — requires verified SHA |
-| `test_result` | Tester | Pass or fail on a specific fix |
-| `ready_for_test` | Developer | Branch ready for audit round |
-| `question` / `answer` | Anyone | Clarification in thread |
-| `note` | Anyone | Informational |
+| `finding` | Tester | Bug or issue found — requires commit SHA + structured body |
+| `fix_ready` | Developer | Fix committed — requires commit SHA + structured body |
+| `test_result` | Tester | Pass or fail — requires commit SHA + structured body |
+| `ready_for_test` | Developer | Branch ready for audit — requires commit SHA + structured body |
+| `question` / `answer` | Anyone | Clarification in thread (free text) |
+| `note` | Anyone | Informational (free text) |
 
 ### Key Protocol Rules
 
@@ -68,6 +69,67 @@ Built and battle-tested on a 135-desk vertical SaaS platform:
 - No agent can approve its own work (sender ≠ recipient, enforced at DB level)
 - Task leases prevent two agents from working the same task simultaneously
 - Humans approve merges — the bridge has no deploy rights
+- Report-bearing kinds (`finding`, `fix_ready`, `ready_for_test`, `test_result`) require a structured JSON body when enforcement is enabled
+
+## What's New in v1.1 — Structured Handoffs
+
+Version 1.0 used free-text bodies for all messages. This worked, but left room for ambiguity: "looks fixed" is not evidence.
+
+**v1.1 introduces a structured JSON protocol for report-bearing messages.**
+
+Instead of prose, agents send compact JSON:
+
+```json
+{
+  "protocol": "verdict-handoff/v1",
+  "task_id": "auth-session-expiry-fix",
+  "commit_sha": "a3f8c2e1d9b07654321fedcba9876543210abcde",
+  "summary": "Fixed session token not expiring on logout.",
+  "findings": ["FIND-001"],
+  "changes": [
+    {
+      "path": "src/auth/session.py",
+      "function": "logout",
+      "finding_ids": ["FIND-001"]
+    }
+  ],
+  "checks": [
+    {
+      "scenario_id": "logout-invalidates-token",
+      "level": "ui",
+      "status": "passed",
+      "evidence": ["screenshots/logout-flow.png"],
+      "limitations": []
+    },
+    {
+      "scenario_id": "token-absent-in-db",
+      "level": "database",
+      "status": "passed",
+      "evidence": ["query-results/sessions-after-logout.json"],
+      "limitations": []
+    }
+  ],
+  "remaining": [],
+  "next_owner": "tester",
+  "verdict": "ready_for_independent_test",
+  "closed_findings": []
+}
+```
+
+**What the broker enforces:**
+- `commit_sha` in the JSON must match the outer message field
+- Every passed/failed check must include at least one evidence reference
+- `closed_findings` must be a subset of declared `findings`
+- Only the independent tester's `test_result` with `verdict: "accepted"` may close findings — and only with UI + database evidence, no limitations, no remaining scope
+
+**What the broker does not enforce:**
+- Git object existence (broker has no git access)
+- Runtime artefact truth (tester verifies independently)
+- Screenshot content
+
+Enforcement is opt-in via `handoff-policy.json`. Free-text bodies remain valid for `note`, `question`, and `answer`.
+
+See [HANDOFFS.md](HANDOFFS.md) for the full protocol reference.
 
 ## Quickstart
 
@@ -79,7 +141,7 @@ Built and battle-tested on a 135-desk vertical SaaS platform:
 ### Setup
 
 ```bash
-git clone https://github.com/your-org/verdict-bridge
+git clone https://github.com/gismojs/verdict-bridge
 cd verdict-bridge
 
 # Start bridge for your developer agent (Claude)
@@ -88,6 +150,19 @@ python3 bridge.py --agent developer serve
 # Start bridge for your tester agent (GPT)  
 python3 bridge.py --agent tester serve
 ```
+
+### Enable structured handoffs (optional)
+
+```bash
+cat > handoff-policy.json <<'EOF'
+{
+  "enforced_agents": ["developer", "tester"],
+  "effective_after": "2026-10-10T00:00:00+00:00"
+}
+EOF
+```
+
+Free-text messages already in flight are unaffected. Exact retries of existing messages are always preserved.
 
 ### Check status
 
@@ -106,6 +181,16 @@ The bridge uses a local SQLite database with WAL mode for concurrent access. For
 
 Schema versioning and automatic migration are built in.
 
+### Files
+
+| File | Purpose |
+|---|---|
+| `bridge.py` | Core broker — message store, task leases, MCP server |
+| `handoff_contract.py` | Structured body validator (v1.1) |
+| `handoff-contract-v1.schema.json` | JSON Schema for report bodies |
+| `handoff-policy.json` | Opt-in enforcement config (create to enable) |
+| `HANDOFFS.md` | Full protocol reference |
+
 ## Roadmap
 
 - [ ] PostgreSQL backend for multi-tenant SaaS
@@ -121,4 +206,4 @@ MIT — use it, fork it, build on it.
 
 ---
 
-*Built by Jochen Schröder. Proven in production on a 135-desk SaaS platform.*  
+*Built by Jochen Schröder. Proven in production on a 135-desk SaaS platform.*

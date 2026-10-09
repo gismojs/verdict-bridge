@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verdict Bridge evidence handoff v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "task_id",
+    "commit_sha",
+    "summary",
+    "findings",
+    "changes",
+    "checks",
+    "remaining",
+    "next_owner",
+    "verdict",
+    "closed_findings"
+  ],
+  "properties": {
+    "protocol": { "const": "verdict-handoff/v1" },
+    "task_id": { "type": "string", "minLength": 1 },
+    "commit_sha": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 1000 },
+    "next_owner": {
+      "enum": ["developer", "tester"]
+    },
+    "findings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "function", "finding_ids"],
+        "properties": {
+          "path":        { "type": "string", "minLength": 1 },
+          "function":    { "type": "string", "minLength": 1 },
+          "finding_ids": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["scenario_id", "level", "status", "evidence", "limitations"],
+        "properties": {
+          "scenario_id": { "type": "string", "minLength": 1 },
+          "level": {
+            "enum": ["source", "memory", "api", "database", "ui", "concurrency"]
+          },
+          "status": {
+            "enum": ["passed", "failed", "blocked", "not_run"]
+          },
+          "evidence": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "limitations": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "status": { "enum": ["passed", "failed"] } }
+            },
+            "then": {
+              "properties": { "evidence": { "minItems": 1 } }
+            }
+          }
+        ]
+      }
+    },
+    "remaining": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "verdict": {
+      "enum": [
+        "progress",
+        "needs_changes",
+        "ready_for_independent_test",
+        "accepted"
+      ]
+    },
+    "closed_findings": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    }
+  }
+}
