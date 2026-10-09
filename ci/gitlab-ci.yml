@@ -1,0 +1,76 @@
+# Verdict Bridge — GitLab CI integration
+#
+# Required CI/CD variables (Settings → CI/CD → Variables):
+#   VB_TESTER_TOKEN   — Bearer token for the tester agent
+#   VB_API_URL        — Full URL to your Verdict Bridge API
+#   VB_DEVELOPER_TOKEN — (optional) token for the developer agent
+
+stages:
+  - verdict-qa
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+
+verdict-bridge-qa:
+  stage: verdict-qa
+  image: python:3.11-slim
+  before_script:
+    - pip install requests --quiet
+  script:
+    - |
+      echo "Checking Verdict Bridge inbox..."
+      RESPONSE=$(curl -sf -H "Authorization: Bearer $VB_TESTER_TOKEN" \
+        "$VB_API_URL/api/inbox?unread_only=true&limit=5") || {
+        echo "Bridge unreachable — skipping"
+        exit 0
+      }
+      COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('messages',[])))")
+      echo "Pending messages: $COUNT"
+    - |
+      python3 - <<'PYEOF'
+      import os, json, requests
+
+      api = os.environ['VB_API_URL']
+      token = os.environ['VB_TESTER_TOKEN']
+      headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+      r = requests.get(f'{api}/api/tasks?status=pending', headers=headers)
+      tasks = r.json().get('tasks', [])
+      print(f'Pending tasks: {len(tasks)}')
+      for task in tasks:
+          print(f'  Task: {task["task_id"]} ({task["status"]})')
+      PYEOF
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  artifacts:
+    reports:
+      dotenv: bridge-status.env
+    expire_in: 1 week
+
+verdict-post-fix-ready:
+  stage: verdict-qa
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl --quiet
+  script:
+    - |
+      [ -z "$VB_DEVELOPER_TOKEN" ] && { echo "No developer token — skipping"; exit 0; }
+      curl -sf -X POST "$VB_API_URL/api/messages" \
+        -H "Authorization: Bearer $VB_DEVELOPER_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"recipient\": \"tester\",
+          \"kind\": \"fix_ready\",
+          \"subject\": \"Fix committed: $CI_COMMIT_SHA\",
+          \"body\": \"GitLab CI: commit $CI_COMMIT_SHORT_SHA pushed to $CI_COMMIT_BRANCH\",
+          \"idempotency_key\": \"gitlab-fix-ready-$CI_COMMIT_SHA\",
+          \"commit_sha\": \"$CI_COMMIT_SHA\"
+        }"
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: on_success

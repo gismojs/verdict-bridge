@@ -1,0 +1,138 @@
+# Verdict Bridge — GitHub Actions integration
+#
+# This workflow runs your tester agent's inbox on every push/PR and posts
+# findings back to the bridge. The developer's fix-ready messages trigger
+# the tester automatically.
+#
+# Required repository secrets:
+#   VB_TESTER_TOKEN   — Bearer token for the tester agent (from api-config.json)
+#   VB_API_URL        — Full URL to your Verdict Bridge API, e.g. https://yourhost:8765
+#
+# Optional:
+#   VB_DEVELOPER_TOKEN — token for the developer agent (if you want CI to post fix_ready)
+
+name: Verdict Bridge QA
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      task_id:
+        description: 'Task ID to claim and run'
+        required: false
+
+env:
+  VB_API_URL: ${{ secrets.VB_API_URL }}
+  VB_TESTER_TOKEN: ${{ secrets.VB_TESTER_TOKEN }}
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Check bridge for pending tester tasks on every push
+  # -------------------------------------------------------------------------
+  verdict-qa:
+    name: Verdict Bridge — Tester audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install verdict-bridge
+        run: pip install fastapi uvicorn[standard] requests
+
+      - name: Check bridge inbox
+        id: inbox
+        run: |
+          RESPONSE=$(curl -sf -H "Authorization: Bearer $VB_TESTER_TOKEN" \
+            "$VB_API_URL/api/inbox?unread_only=true&limit=5") || {
+            echo "Bridge unreachable — skipping"
+            echo "has_messages=false" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          COUNT=$(echo "$RESPONSE" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('messages',[])))")
+          echo "has_messages=$([[ $COUNT -gt 0 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "inbox_count=$COUNT" >> $GITHUB_OUTPUT
+          echo "📬 Bridge inbox: $COUNT pending message(s)"
+
+      - name: Claim pending tasks
+        if: steps.inbox.outputs.has_messages == 'true'
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, sys, json, requests
+
+          api = os.environ['VB_API_URL']
+          token = os.environ['VB_TESTER_TOKEN']
+          headers = {'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'}
+
+          # List pending tasks assigned to tester
+          r = requests.get(f'{api}/api/tasks?status=pending', headers=headers)
+          tasks = r.json().get('tasks', [])
+          print(f'Pending tasks: {len(tasks)}')
+
+          for task in tasks:
+              tid = task['task_id']
+              print(f'  → Claiming {tid}')
+              cr = requests.post(f'{api}/api/tasks/{tid}/claim', headers=headers,
+                                 json={'lease_seconds': 1800})
+              if not cr.ok:
+                  print(f'    Could not claim: {cr.text}')
+                  continue
+              lease = cr.json().get('lease_token')
+              print(f'    Lease: {lease[:16]}...')
+              # Your actual test logic goes here
+              # For now, checkpoint as waiting (human review needed)
+              requests.post(f'{api}/api/tasks/{tid}/checkpoint', headers=headers, json={
+                  'lease_token': lease,
+                  'checkpoint_revision': 1,
+                  'progress': json.dumps({'ci_run': os.environ.get('GITHUB_RUN_ID', 'local'),
+                                          'commit': os.environ.get('COMMIT_SHA', '')}),
+                  'status': 'waiting',
+              })
+          PYEOF
+
+      - name: Post bridge status summary
+        if: always()
+        run: |
+          STATUS=$(curl -sf -H "Authorization: Bearer $VB_TESTER_TOKEN" \
+            "$VB_API_URL/api/status" 2>/dev/null || echo '{}')
+          echo "### ⚖ Verdict Bridge Status" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$STATUS" | python3 -m json.tool >> $GITHUB_STEP_SUMMARY || echo "$STATUS" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # -------------------------------------------------------------------------
+  # After developer merges a fix — post fix_ready automatically
+  # -------------------------------------------------------------------------
+  post-fix-ready:
+    name: Verdict Bridge — Post fix_ready
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: []
+    steps:
+      - name: Post fix_ready to bridge
+        env:
+          VB_DEVELOPER_TOKEN: ${{ secrets.VB_DEVELOPER_TOKEN }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          # Only runs if developer token is configured
+          [[ -z "$VB_DEVELOPER_TOKEN" ]] && { echo "No developer token — skipping"; exit 0; }
+
+          curl -sf -X POST "$VB_API_URL/api/messages" \
+            -H "Authorization: Bearer $VB_DEVELOPER_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"recipient\": \"tester\",
+              \"kind\": \"fix_ready\",
+              \"subject\": \"Fix committed: $COMMIT_SHA\",
+              \"body\": \"Automated CI notification: commit pushed to main.\",
+              \"idempotency_key\": \"ci-fix-ready-$COMMIT_SHA\",
+              \"commit_sha\": \"$COMMIT_SHA\"
+            }" | python3 -m json.tool

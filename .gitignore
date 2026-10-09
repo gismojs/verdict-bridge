@@ -9,3 +9,5 @@ __pycache__/
 !handoff-policy.example.json
 !example-config.json
 .env
+!api-config.example.json
+api-config.json

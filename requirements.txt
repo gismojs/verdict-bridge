@@ -1,4 +1,7 @@
-# Installed and verified locally; no new package was installed for this setup.
+# Core — MCP stdio server (required)
 mcp==1.9.4
-# Existing dependency used by the watcher's Unix-socket WebSocket handshake.
 websockets==16.1
+
+# REST API + Dashboard — optional, only needed if you run api.py
+fastapi>=0.111
+uvicorn[standard]>=0.29

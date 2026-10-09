@@ -1,0 +1,10 @@
+{
+  "_comment": "Copy this to api-config.json and replace tokens with long random secrets.",
+  "host": "127.0.0.1",
+  "port": 8765,
+  "cors_origins": ["http://localhost:3000", "http://localhost:8765"],
+  "tokens": {
+    "REPLACE_WITH_DEVELOPER_TOKEN": "developer",
+    "REPLACE_WITH_TESTER_TOKEN": "tester"
+  }
+}
