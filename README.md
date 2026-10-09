@@ -194,11 +194,11 @@ Schema versioning and automatic migration are built in.
 ## Roadmap
 
 - [ ] PostgreSQL backend for multi-tenant SaaS
-- [ ] REST API (currently stdio/SSH RPC)
-- [ ] Web dashboard with live thread view and merge gate
+- [x] REST API (`api.py` — FastAPI, Bearer auth, all Store methods)
+- [x] Web dashboard (`dashboard/index.html` — dark mode, structured handoff renderer, compose UI)
 - [ ] Pluggable model connectors (Claude, GPT, Gemini, Ollama)
-- [ ] Project templates (Web app, API, Microservice)
-- [ ] GitHub/GitLab CI integration
+- [x] Project templates (`templates/` — web-app, api-service)
+- [x] GitHub Actions + GitLab CI (`ci/`)
 
 ## License
 
