@@ -19,19 +19,22 @@ from uuid import UUID, uuid4
 from handoff_contract import validate_report
 from push_transport import ensure_schema, append_event, notify_hint, events_for
 
-AGENTS = ("codex", "claude", "codex_hetzner", "claude_hetzner", "codex_macbook", "claude_macbook")
+AGENTS = ("codex", "claude", "codex_hetzner", "claude_hetzner", "codex_macbook", "claude_macbook", "gemini_macbook", "gemini_macbook_2", "gemini_macbook_3")
 AGENT_INFO = {
     "codex":          {"name": "codex",          "role": "tester",    "host": "local"},
     "claude":         {"name": "claude",         "role": "developer", "host": "local"},
     "codex_hetzner":  {"name": "codex_hetzner",  "role": "tester",    "host": "hetzner"},
     "claude_hetzner": {"name": "claude_hetzner", "role": "developer", "host": "hetzner"},
     "codex_macbook":  {"name": "codex_macbook",  "role": "tester",    "host": "macbook"},
-    "claude_macbook": {"name": "claude_macbook", "role": "developer", "host": "macbook"},
+    "claude_macbook":  {"name": "claude_macbook",  "role": "developer", "host": "macbook"},
+    "gemini_macbook":  {"name": "gemini_macbook",  "role": "developer", "host": "macbook"},
+    "gemini_macbook_2": {"name": "gemini_macbook_2", "role": "developer", "host": "macbook"},
+    "gemini_macbook_3": {"name": "gemini_macbook_3", "role": "developer", "host": "macbook"},
 }
 KINDS = ("note", "question", "answer", "ready_for_test", "finding", "fix_ready", "test_result")
 COMMIT_REQUIRED = {"ready_for_test", "finding", "fix_ready", "test_result"}
 DEFAULT_STATE = Path.home() / ".local" / "share" / "verdict-bridge"
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MAX_BODY = 12000
 MAX_MESSAGES = 20000
 
@@ -88,12 +91,14 @@ class Store:
             raise ValueError("database must not be a symlink")
         with self.connection() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, 2, SCHEMA_VERSION):
+            if version not in (0, 1, 2, 3, SCHEMA_VERSION):
                 raise ValueError("unsupported database schema version")
             if version == 1:
                 self._migrate_v1(db)
             if version == 2:
                 self._migrate_v2(db)
+            if db.execute("PRAGMA user_version").fetchone()[0] == 3:
+                self._migrate_v3(db)
             deadline = time.monotonic() + 5
             while True:
                 try:
@@ -108,8 +113,8 @@ class Store:
                     seq INTEGER PRIMARY KEY AUTOINCREMENT,
                     id TEXT NOT NULL UNIQUE,
                     project TEXT NOT NULL,
-                    sender TEXT NOT NULL CHECK(sender IN ('codex', 'claude', 'codex_hetzner', 'claude_hetzner', 'codex_macbook', 'claude_macbook')),
-                    recipient TEXT NOT NULL CHECK(recipient IN ('codex', 'claude', 'codex_hetzner', 'claude_hetzner', 'codex_macbook', 'claude_macbook')),
+                    sender TEXT NOT NULL CHECK(sender IN ('codex', 'claude', 'codex_hetzner', 'claude_hetzner', 'codex_macbook', 'claude_macbook', 'gemini_macbook', 'gemini_macbook_2', 'gemini_macbook_3')),
+                    recipient TEXT NOT NULL CHECK(recipient IN ('codex', 'claude', 'codex_hetzner', 'claude_hetzner', 'codex_macbook', 'claude_macbook', 'gemini_macbook', 'gemini_macbook_2', 'gemini_macbook_3')),
                     kind TEXT NOT NULL,
                     subject TEXT NOT NULL,
                     body TEXT NOT NULL,
@@ -144,7 +149,7 @@ class Store:
                     created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
                     UNIQUE(desk_id, round_id, kind)
                 );
-                PRAGMA user_version=3;
+                PRAGMA user_version=4;
             """)
         with self.connection() as db:
             ensure_schema(db)
@@ -177,68 +182,84 @@ class Store:
 
     @staticmethod
     def _migrate_v2(db):
-        """Atomic v2 → v3: expand 4-agent CHECK to 6 agents.
+        Store._migrate_agents(db, 2, AGENTS[:4], target=3)
 
-        Creates a backup before mutating schema. Operator should quiesce
-        workers before running; in-flight writers on old schema will fail
-        at INSERT and retry cleanly after migration.
+    @staticmethod
+    def _migrate_v3(db):
+        Store._migrate_agents(db, 3, AGENTS[:6], target=4)
+
+    @staticmethod
+    def _migrate_agents(db, version: int, old_agents, *, target: int):
+        """Atomic schema rebuild: expand agent CHECK constraint to AGENTS[:target].
+
+        Creates a timestamped SQLite backup before any mutation.
+        Preserves all rows, AUTOINCREMENT high-water mark, indexes, and triggers.
+        Operator must quiesce workers before rollout.
         """
         import re as _re
         db.commit()
         filename = db.execute("PRAGMA database_list").fetchone()[2]
-        from pathlib import Path as _Path
-        backup = _Path(filename).with_name("messages.pre-v3-" + str(uuid4()) + ".sqlite3")
+        backup = Path(filename).with_name(f"messages.pre-v{target}-{uuid4()}.sqlite3")
         fd = os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(fd)
         dst = sqlite3.connect(backup)
         try:
             db.backup(dst)
             if dst.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
-                raise ValueError("pre-migration backup integrity failed")
+                raise ValueError("pre-migration backup integrity check failed")
         finally:
             dst.close()
-        old_set = "('codex', 'claude', 'codex_hetzner', 'claude_hetzner')"
-        new_set = "('codex', 'claude', 'codex_hetzner', 'claude_hetzner', 'codex_macbook', 'claude_macbook')"
+        old_set = "(" + ", ".join(repr(a) for a in old_agents) + ")"
+        new_set = "(" + ", ".join(repr(a) for a in AGENTS[:target]) + ")"
         db.execute("PRAGMA foreign_keys=OFF")
         try:
             db.execute("BEGIN IMMEDIATE")
-            if db.execute("PRAGMA user_version").fetchone()[0] != 2:
-                raise ValueError("schema changed before migration lock")
+            if db.execute("PRAGMA user_version").fetchone()[0] != version:
+                raise ValueError("schema changed before migration lock — aborting")
             sql = db.execute(
                 "SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'"
             ).fetchone()[0]
             if sql.count(old_set) != 2:
-                raise ValueError("unexpected v2 agent CHECK schema — cannot migrate")
+                raise ValueError(f"unexpected agent CHECK in v{version} schema — cannot migrate")
             indexes = [r[0] for r in db.execute(
-                "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='messages' AND sql IS NOT NULL"
+                "SELECT sql FROM sqlite_master WHERE type='index'"
+                " AND tbl_name='messages' AND sql IS NOT NULL"
             )]
+            # Drop triggers before rebuild — SQLite rejects ALTER TABLE while
+            # cross-table triggers on messages are active. Re-create after rename.
+            triggers = list(db.execute(
+                "SELECT name, sql FROM sqlite_master"
+                " WHERE type='trigger' AND sql IS NOT NULL"
+            ))
+            for tname, _ in triggers:
+                db.execute('DROP TRIGGER "' + tname.replace('"', '""') + '"')
             seqrow = db.execute("SELECT seq FROM sqlite_sequence WHERE name='messages'").fetchone()
             seq = seqrow[0] if seqrow else 0
+            tmp = f"messages_v{target}"
             expanded, n = _re.subn(
                 r'CREATE TABLE\s+(?:IF NOT EXISTS\s+)?["`\[]?messages["`\]]?',
-                'CREATE TABLE messages_v3', sql, count=1, flags=_re.I)
+                f"CREATE TABLE {tmp}", sql, count=1, flags=_re.I)
             if n != 1:
                 raise ValueError("could not rewrite messages table declaration")
             expanded = expanded.replace(old_set, new_set)
             db.execute(expanded)
-            db.execute("INSERT INTO messages_v3 SELECT * FROM messages")
+            db.execute(f"INSERT INTO {tmp} SELECT * FROM messages")
             db.execute("DROP TABLE messages")
-            db.execute("ALTER TABLE messages_v3 RENAME TO messages")
+            db.execute(f"ALTER TABLE {tmp} RENAME TO messages")
             db.execute("UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name='messages'", (seq,))
-            for stmt in indexes:
+            for stmt in indexes + [tsql for _, tsql in triggers]:
                 db.execute(stmt)
             if db.execute("PRAGMA foreign_key_check").fetchall():
                 raise ValueError("migration foreign-key check failed")
             if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("migration integrity check failed")
-            db.execute("PRAGMA user_version=3")
+            db.execute(f"PRAGMA user_version={target}")
             db.commit()
         except BaseException:
             db.rollback()
             raise
         finally:
             db.execute("PRAGMA foreign_keys=ON")
-
     @contextmanager
     def connection(self):
         db = sqlite3.connect(self.path, timeout=5.0)
@@ -389,7 +410,7 @@ class Store:
             ).fetchone()[0]
             sent = db.execute("SELECT COUNT(*) FROM messages WHERE sender=?", (self.agent,)).fetchone()[0]
             total = db.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
-        return {"service": "verdict-bridge", "version": "1.2.0", "project": self.project,
+        return {"service": "verdict-bridge", "version": "1.3.0", "project": self.project,
                 "agent": self.agent, "name": AGENT_INFO[self.agent]["name"],
                 "agents": AGENT_INFO, "peers": [x for x in AGENTS if x != self.agent],
                 "peer": "claude" if self.agent == "codex" else "codex" if self.agent == "claude" else None,
@@ -582,7 +603,7 @@ def build_server(store):
         return store.status()
 
     @server.tool(annotations=writing)
-    def send_message(recipient: Literal["codex", "claude", "codex_hetzner", "claude_hetzner", "codex_macbook", "claude_macbook"],
+    def send_message(recipient: Literal["codex", "claude", "codex_hetzner", "claude_hetzner", "codex_macbook", "claude_macbook", "gemini_macbook", "gemini_macbook_2", "gemini_macbook_3"],
                      kind: Literal["note", "question", "answer", "ready_for_test", "finding", "fix_ready", "test_result"],
                      subject: str, body: str, idempotency_key: str,
                      commit_sha: str = "", reply_to: str = "") -> dict[str, Any]:
@@ -619,7 +640,7 @@ def build_server(store):
     @server.tool(annotations=writing)
     def create_task(task_id: str, desk_id: str, round_id: str,
                     kind: Literal['audit','fix'],
-                    assignee: Literal['codex','claude','codex_hetzner','claude_hetzner','codex_macbook','claude_macbook'],
+                    assignee: Literal['codex','claude','codex_hetzner','claude_hetzner','codex_macbook','claude_macbook','gemini_macbook','gemini_macbook_2','gemini_macbook_3'],
                     commit_sha: str, build_id: str, scenario_reference: str,
                     payload: str) -> dict[str, Any]:
         """Horst assigns one immutable desk/round task. A task grants no extra permissions."""

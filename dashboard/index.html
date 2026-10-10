@@ -191,6 +191,13 @@ header {
 .free-body { white-space: pre-wrap; font-family: var(--mono); font-size: .8rem;
   line-height: 1.6; color: var(--text); }
 
+/* ── 3×3 grid for 9 agent cards ─────────────────────────────────────────── */
+@media (min-width: 1100px) {
+  #agent-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 8px; }
+  .agent-card { margin: 0; }
+  .metric-val { font-size: .95rem; }
+}
+
 /* ── Stats sidebar ───────────────────────────────────────────────────────── */
 #stats-sidebar {
   border-left: 1px solid var(--border);
@@ -356,16 +363,20 @@ header {
 'use strict';
 // ── Config ──────────────────────────────────────────────────────────────────
 const AGENT_COLORS = {
-  codex:          '#208568',
-  claude:         '#a66a38',
-  codex_hetzner:  '#4578ae',
-  claude_hetzner: '#966385',
-  codex_macbook:  '#087b83',
+  codex:           '#208568',
+  claude:          '#a66a38',
+  codex_hetzner:   '#4578ae',
+  claude_hetzner:  '#966385',
+  codex_macbook:   '#087b83',
   claude_macbook:  '#805db0',
+  gemini_macbook:  '#3569b5',
+  gemini_macbook_2: '#a15a27',
+  gemini_macbook_3: '#ad4678',
 };
 const AGENT_INITIALS = {
   codex:'Cx', claude:'Cl', codex_hetzner:'CH', claude_hetzner:'EL',
   codex_macbook:'CM', claude_macbook:'PM',
+  gemini_macbook:'G1', gemini_macbook_2:'G2', gemini_macbook_3:'G3',
 };
 const KIND_LABELS = {
   note:'Note', question:'Question', answer:'Answer',
@@ -759,7 +770,8 @@ function renderStats(status) {
     const color = AGENT_COLORS[id];
     const init  = AGENT_INITIALS[id] || id.slice(0,2).toUpperCase();
     const info  = { codex:'tester', claude:'developer', codex_hetzner:'tester',
-                    claude_hetzner:'developer', codex_macbook:'tester', claude_macbook:'developer' };
+                    claude_hetzner:'developer', codex_macbook:'tester', claude_macbook:'developer',
+                    gemini_macbook:'developer', gemini_macbook_2:'developer', gemini_macbook_3:'developer' };
     const host  = id.endsWith('_hetzner') ? 'hetzner' : id.endsWith('_macbook') ? 'macbook' : 'local';
     const role  = info[id] || '';
     const c = counts[id];

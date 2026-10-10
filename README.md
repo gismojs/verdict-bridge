@@ -131,6 +131,19 @@ Enforcement is opt-in via `handoff-policy.json`. Free-text bodies remain valid f
 
 See [HANDOFFS.md](HANDOFFS.md) for the full protocol reference.
 
+## What's New in v1.3 — Gemini support, robust migrations
+
+**9 agents across 3 vendors:**
+- Added `gemini_macbook`, `gemini_macbook_2`, `gemini_macbook_3` as developer agents
+- First multi-vendor setup with Anthropic, OpenAI, and Google agents in the same project
+- Dashboard updated with Gemini color palette and 3×3 agent card grid
+
+**Robust schema migration (`_migrate_agents`):**
+- Generic migration helper — adds new agent IDs to the CHECK constraint in one atomic transaction
+- Trigger preservation: drops and re-creates all SQLite triggers around the rebuild (required — SQLite rejects ALTER TABLE while cross-table triggers are active)
+- Pre-migration backup with integrity check, post-migration foreign-key + integrity validation
+- Schema v3 → v4 automatic on first startup
+
 ## What's New in v1.2 — Push Transport, 6 Agents, Dashboard
 
 **Push transport (`push_transport.py`):**
@@ -194,14 +207,17 @@ python3 bridge.py --agent developer inbox
 
 Configure up to 6 agents per project across up to 3 hosts:
 
-| Agent ID | Role | Default host |
-|---|---|---|
-| `codex` | tester | local |
-| `claude` | developer | local |
-| `codex_hetzner` | tester | hetzner |
-| `claude_hetzner` | developer | hetzner |
-| `codex_macbook` | tester | macbook |
-| `claude_macbook` | developer | macbook |
+| Agent ID | Role | Default host | Model family |
+|---|---|---|---|
+| `codex` | tester | local | OpenAI |
+| `claude` | developer | local | Anthropic |
+| `codex_hetzner` | tester | hetzner | OpenAI |
+| `claude_hetzner` | developer | hetzner | Anthropic |
+| `codex_macbook` | tester | macbook | OpenAI |
+| `claude_macbook` | developer | macbook | Anthropic |
+| `gemini_macbook` | developer | macbook | Google |
+| `gemini_macbook_2` | developer | macbook | Google |
+| `gemini_macbook_3` | developer | macbook | Google |
 
 Agents are identified by ID — you choose which model fills each role. The bridge enforces that testers and developers are always different agents. For remote hosts, configure `location.json` to point agents to the central SQLite database via SSH RPC.
 
@@ -230,7 +246,7 @@ Schema versioning and automatic migration are built in.
 - [ ] Unix socket server mode (persistent process, no per-call startup cost)
 - [x] REST API (`api.py` — FastAPI, Bearer auth, all Store methods)
 - [x] Web dashboard (`dashboard/index.html` — dark mode, structured handoff renderer, compose UI)
-- [ ] Pluggable model connectors (Claude, GPT, Gemini, Ollama)
+- [x] Multi-vendor support — Claude, GPT, and Gemini agents in the same project
 - [x] Project templates (`templates/` — web-app, api-service)
 - [x] GitHub Actions + GitLab CI (`ci/`)
 
