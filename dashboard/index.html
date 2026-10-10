@@ -5,184 +5,327 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Verdict Bridge</title>
   <style>
-    :root {
-      --bg: #0f1117; --surface: #1a1d27; --border: #2d3148;
-      --text: #e2e8f0; --muted: #718096; --accent: #6c63ff;
-      --green: #48bb78; --red: #fc8181; --yellow: #f6e05e; --blue: #63b3ed;
-      --radius: 6px; --mono: 'JetBrains Mono', 'Fira Code', monospace;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text); font-family: system-ui, sans-serif;
-           display: flex; flex-direction: column; height: 100vh; }
-    header { background: var(--surface); border-bottom: 1px solid var(--border);
-             padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
-    header h1 { font-size: 1rem; font-weight: 700; letter-spacing: .03em; color: var(--accent); }
-    #agent-badge { font-size: .75rem; padding: 2px 10px; border-radius: 999px;
-                   background: var(--border); color: var(--muted); }
-    #agent-badge.connected { background: #1a3a2a; color: var(--green); }
-    #refresh-btn { margin-left: auto; font-size: .8rem; padding: 4px 14px; border-radius: var(--radius);
-                   background: var(--accent); color: #fff; border: none; cursor: pointer; }
-    #refresh-btn:hover { opacity: .85; }
+/* ── Reset & tokens ─────────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --bg: #0f1117; --surface: #1a1d27; --border: #2a2d3e;
+  --text: #e2e8f0; --muted: #718096; --accent: #6c63ff;
+  --green: #48bb78; --red: #fc8181; --yellow: #f6e05e; --blue: #63b3ed;
+  --radius: 8px; --mono: 'JetBrains Mono', 'Fira Code', monospace;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); height: 100dvh;
+       display: flex; flex-direction: column; overflow: hidden; }
+button { cursor: pointer; border: none; font: inherit; }
+input, textarea, select { font: inherit; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-    /* Token setup */
-    #setup { flex: 1; display: flex; align-items: center; justify-content: center; }
-    #setup-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-                  padding: 32px; width: 380px; display: flex; flex-direction: column; gap: 12px; }
-    #setup-card h2 { font-size: 1rem; color: var(--text); }
-    #setup-card p  { font-size: .82rem; color: var(--muted); }
-    #setup-card input { width: 100%; background: var(--bg); border: 1px solid var(--border);
-                        border-radius: var(--radius); padding: 8px 12px; color: var(--text);
-                        font-family: var(--mono); font-size: .82rem; }
-    #setup-card input:focus { outline: none; border-color: var(--accent); }
-    #setup-card button { background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
-                         padding: 9px; cursor: pointer; font-size: .85rem; }
-    #setup-card button:hover { opacity: .85; }
-    #setup-error { color: var(--red); font-size: .78rem; display: none; }
+/* ── Header ─────────────────────────────────────────────────────────────── */
+header {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 0 18px; height: 56px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px;
+}
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand-icon { width: 34px; height: 34px; border-radius: 10px;
+  background: var(--accent); display: flex; align-items: center;
+  justify-content: center; font-size: 18px; flex-shrink: 0; }
+.brand-text { font-size: .95rem; font-weight: 700; letter-spacing: -.01em; }
+.brand-sub { font-size: .68rem; color: var(--muted); margin-top: 1px; }
+#conn-badge { font-size: .72rem; padding: 2px 10px; border-radius: 999px;
+  background: var(--border); color: var(--muted); margin-left: 8px; }
+#conn-badge.live { background: rgba(72,187,120,.15); color: var(--green); }
+#updated-at { font-size: .7rem; color: var(--muted); margin-left: 4px; }
+.hdr-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.btn { border-radius: 6px; padding: 5px 14px; font-size: .78rem; }
+.btn-ghost { background: none; border: 1px solid var(--border); color: var(--muted); }
+.btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { opacity: .88; }
 
-    /* Main layout */
-    #main { flex: 1; display: none; overflow: hidden; }
-    .layout { display: grid; grid-template-columns: 340px 1fr; height: 100%; }
-    .sidebar { background: var(--surface); border-right: 1px solid var(--border);
-               display: flex; flex-direction: column; overflow: hidden; }
-    .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
-    .tab-btn { flex: 1; padding: 10px; font-size: .78rem; text-align: center; cursor: pointer;
-               border: none; background: none; color: var(--muted); border-bottom: 2px solid transparent; }
-    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
-    .message-list { flex: 1; overflow-y: auto; }
-    .msg-item { padding: 12px 14px; border-bottom: 1px solid var(--border); cursor: pointer;
-                transition: background .1s; }
-    .msg-item:hover { background: rgba(108,99,255,.06); }
-    .msg-item.selected { background: rgba(108,99,255,.12); }
-    .msg-item.unread .msg-subject { font-weight: 700; }
-    .msg-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-    .msg-subject { font-size: .84rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .msg-preview { font-size: .76rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .kind-badge { font-size: .68rem; padding: 1px 7px; border-radius: 999px; flex-shrink: 0; }
-    .kind-finding    { background: #3a1a1a; color: var(--red); }
-    .kind-fix_ready  { background: #1a2a3a; color: var(--blue); }
-    .kind-test_result { background: #1a3a2a; color: var(--green); }
-    .kind-ready_for_test { background: #2a2a1a; color: var(--yellow); }
-    .kind-note, .kind-question, .kind-answer { background: var(--border); color: var(--muted); }
-    .unread-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+/* ── Login ───────────────────────────────────────────────────────────────── */
+#setup { flex: 1; display: flex; align-items: center; justify-content: center; }
+.setup-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 36px; width: 380px;
+  display: flex; flex-direction: column; gap: 14px; }
+.setup-card h2 { font-size: 1.1rem; }
+.setup-card p  { font-size: .82rem; color: var(--muted); line-height: 1.55; }
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: .73rem; color: var(--muted); }
+.field input { background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 12px; color: var(--text); }
+.field input:focus { outline: none; border-color: var(--accent); }
+#setup-error { font-size: .75rem; color: var(--red); display: none; }
 
-    /* Detail pane */
-    .detail { display: flex; flex-direction: column; overflow: hidden; }
-    .detail-header { padding: 16px 20px; border-bottom: 1px solid var(--border);
-                     background: var(--surface); flex-shrink: 0; }
-    .detail-header h2 { font-size: .95rem; margin-bottom: 6px; }
-    .detail-meta { display: flex; gap: 12px; flex-wrap: wrap; font-size: .75rem; color: var(--muted); }
-    .detail-meta span { display: flex; align-items: center; gap: 4px; }
-    .detail-actions { padding: 10px 20px; border-bottom: 1px solid var(--border);
-                      background: var(--surface); display: flex; gap: 8px; flex-shrink: 0; }
-    .btn-sm { font-size: .78rem; padding: 4px 14px; border-radius: var(--radius);
-              border: 1px solid var(--border); background: var(--bg); color: var(--text);
-              cursor: pointer; }
-    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .btn-primary:hover { opacity: .85; color: #fff; }
-    .detail-body { flex: 1; overflow-y: auto; padding: 20px; }
-    .body-text { white-space: pre-wrap; font-family: var(--mono); font-size: .82rem;
-                 color: var(--text); line-height: 1.6; }
-    .body-json { background: var(--surface); border: 1px solid var(--border);
-                 border-radius: var(--radius); padding: 16px; }
-    .json-section { margin-bottom: 16px; }
-    .json-label { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em;
-                  color: var(--muted); margin-bottom: 6px; }
-    .json-value { font-family: var(--mono); font-size: .8rem; }
-    .verdict-accepted   { color: var(--green); }
-    .verdict-needs_changes { color: var(--red); }
-    .verdict-ready_for_independent_test { color: var(--blue); }
-    .verdict-progress   { color: var(--yellow); }
-    .check-passed { color: var(--green); }
-    .check-failed { color: var(--red); }
-    .check-blocked, .check-not_run { color: var(--muted); }
-    .finding-tag { display: inline-block; background: var(--border); border-radius: 999px;
-                   padding: 1px 8px; font-size: .74rem; margin: 2px; }
-    .sha { font-family: var(--mono); font-size: .78rem; color: var(--muted); }
-    .empty-state { flex: 1; display: flex; align-items: center; justify-content: center;
-                   color: var(--muted); font-size: .88rem; }
+/* ── Main layout ─────────────────────────────────────────────────────────── */
+#app { flex: 1; display: none; min-height: 0;
+  display: none; grid-template-columns: 260px 1fr 340px;
+  grid-template-rows: 1fr; }
+#app.visible { display: grid; }
+@media (max-width: 1100px) { #app { grid-template-columns: 220px 1fr; } #stats-sidebar { display: none; } }
+@media (max-width: 700px) { #app { grid-template-columns: 1fr; } #sidebar { display: none; } }
 
-    /* Tasks tab */
-    .task-item { padding: 12px 14px; border-bottom: 1px solid var(--border); }
-    .task-id { font-family: var(--mono); font-size: .78rem; color: var(--accent); margin-bottom: 3px; }
-    .task-meta { font-size: .74rem; color: var(--muted); display: flex; gap: 10px; }
-    .status-badge { font-size: .68rem; padding: 1px 8px; border-radius: 999px; }
-    .status-pending  { background: #2a2a1a; color: var(--yellow); }
-    .status-running  { background: #1a2a3a; color: var(--blue); }
-    .status-waiting  { background: var(--border); color: var(--muted); }
-    .status-complete { background: #1a3a2a; color: var(--green); }
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+#sidebar {
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.tab { flex: 1; padding: 10px 6px; font-size: .75rem; text-align: center;
+  background: none; color: var(--muted); border-bottom: 2px solid transparent; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.sidebar-filters { padding: 10px; border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 5px; flex-shrink: 0; }
+.agent-chip { display: flex; align-items: center; gap: 5px; padding: 3px 10px;
+  border-radius: 999px; font-size: .7rem; border: 1px solid var(--border);
+  background: none; color: var(--muted); }
+.agent-chip .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.agent-chip.active { border-color: var(--accent); color: var(--text); background: rgba(108,99,255,.1); }
+.sidebar-search { padding: 8px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.sidebar-search input { width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; color: var(--text); font-size: .8rem; }
+.sidebar-search input:focus { outline: none; border-color: var(--accent); }
+.msg-list { flex: 1; overflow-y: auto; }
+.msg-item { padding: 11px 13px; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: background .1s; }
+.msg-item:hover { background: rgba(108,99,255,.05); }
+.msg-item.selected { background: rgba(108,99,255,.12); }
+.msg-item-meta { display: flex; align-items: center; gap: 5px; margin-bottom: 4px; }
+.msg-subject { font-size: .82rem; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg-item.unread .msg-subject { font-weight: 700; }
+.msg-preview { font-size: .72rem; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unread-dot { width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); flex-shrink: 0; }
+.day-sep { padding: 6px 13px; font-size: .67rem; color: var(--muted);
+  background: var(--bg); border-bottom: 1px solid var(--border);
+  text-transform: uppercase; letter-spacing: .07em; }
+.kind-badge { font-size: .65rem; padding: 1px 6px; border-radius: 999px; flex-shrink: 0; white-space: nowrap; }
+.kind-finding      { background: rgba(252,129,129,.15); color: var(--red); }
+.kind-fix_ready    { background: rgba(99,179,237,.15);  color: var(--blue); }
+.kind-test_result  { background: rgba(72,187,120,.15);  color: var(--green); }
+.kind-ready_for_test { background: rgba(246,224,94,.15); color: var(--yellow); }
+.kind-note, .kind-question, .kind-answer { background: var(--border); color: var(--muted); }
+.load-older { width: 100%; padding: 10px; font-size: .75rem; background: none;
+  color: var(--muted); border-top: 1px solid var(--border); }
+.load-older:hover { color: var(--accent); }
+.empty-list { padding: 24px; text-align: center; color: var(--muted); font-size: .82rem; }
 
-    /* Compose */
-    #compose-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
-                       z-index: 100; align-items: center; justify-content: center; }
-    #compose-overlay.open { display: flex; }
-    #compose-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-                    padding: 24px; width: 520px; max-height: 80vh; overflow-y: auto;
-                    display: flex; flex-direction: column; gap: 12px; }
-    #compose-card h2 { font-size: .95rem; }
-    .field-row { display: flex; flex-direction: column; gap: 4px; }
-    .field-row label { font-size: .76rem; color: var(--muted); }
-    .field-row select, .field-row input, .field-row textarea {
-      background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
-      padding: 7px 10px; color: var(--text); font-size: .83rem; font-family: inherit; }
-    .field-row textarea { min-height: 100px; resize: vertical; font-family: var(--mono); }
-    .field-row select:focus, .field-row input:focus, .field-row textarea:focus {
-      outline: none; border-color: var(--accent); }
-    .compose-actions { display: flex; gap: 8px; justify-content: flex-end; }
+/* ── Task list (sidebar tab) ─────────────────────────────────────────────── */
+.task-item { padding: 11px 13px; border-bottom: 1px solid var(--border); }
+.task-id { font-family: var(--mono); font-size: .75rem; color: var(--accent); margin-bottom: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.task-row { display: flex; align-items: center; gap: 8px; font-size: .72rem; color: var(--muted); flex-wrap: wrap; }
+.status-badge { font-size: .65rem; padding: 1px 7px; border-radius: 999px; }
+.status-pending  { background: rgba(246,224,94,.15); color: var(--yellow); }
+.status-running  { background: rgba(99,179,237,.15);  color: var(--blue); }
+.status-waiting  { background: var(--border); color: var(--muted); }
+.status-complete { background: rgba(72,187,120,.15); color: var(--green); }
 
-    ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  </style>
+/* ── Detail pane ─────────────────────────────────────────────────────────── */
+#detail { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.detail-empty { flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: .88rem; }
+.detail-hdr { padding: 16px 20px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0; }
+.detail-hdr h2 { font-size: .97rem; margin-bottom: 6px; }
+.detail-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: .73rem; color: var(--muted); }
+.detail-meta .sha { font-family: var(--mono); font-size: .7rem; }
+.detail-actions { padding: 9px 18px; border-bottom: 1px solid var(--border);
+  background: var(--surface); flex-shrink: 0; display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+.btn-sm { border-radius: 6px; padding: 4px 13px; font-size: .75rem;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text); }
+.btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+.btn-sm.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-sm.primary:hover { opacity: .88; color: #fff; }
+#detail-scroll { flex: 1; overflow-y: auto; padding: 20px; }
+
+/* ── Chat bubble layout ──────────────────────────────────────────────────── */
+.bubble-wrap { display: flex; gap: 10px; margin-bottom: 18px; }
+.bubble-wrap.right { flex-direction: row-reverse; }
+.avatar-circle { width: 30px; height: 30px; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem; font-weight: 800; flex-shrink: 0;
+  border: 2px solid var(--agent-color, var(--border)); color: var(--agent-color, var(--muted)); }
+.bubble { max-width: 78%; }
+.bubble-meta { font-size: .68rem; color: var(--muted); margin-bottom: 4px; display: flex; gap: 7px; align-items: center; }
+.bubble-wrap.right .bubble-meta { justify-content: flex-end; }
+.bubble-body { background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--agent-color, var(--border));
+  border-radius: var(--radius); padding: 12px 14px; cursor: pointer; transition: border-color .15s; }
+.bubble-wrap.right .bubble-body { border-left: none; border-right: 3px solid var(--agent-color, var(--border)); }
+.bubble-body:hover { border-color: var(--accent); }
+.bubble-body.selected-bubble { border-color: var(--accent) !important; }
+.bubble-subject { font-size: .84rem; font-weight: 600; margin-bottom: 5px; }
+.bubble-text { font-size: .78rem; color: var(--muted); white-space: pre-wrap;
+  max-height: 120px; overflow: hidden; mask-image: linear-gradient(#000 70%, transparent); }
+.bubble-body.expanded .bubble-text { max-height: none; mask-image: none; }
+.bubble-footer { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.bubble-sha { font-family: var(--mono); font-size: .67rem; color: var(--muted); }
+.ack-dot { font-size: .67rem; }
+.ack-dot.acked { color: var(--green); } .ack-dot.pending { color: var(--muted); }
+.btn-expand { font-size: .67rem; background: none; color: var(--accent); padding: 0; }
+.latest-btn { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--accent); color: #fff; border-radius: 999px;
+  padding: 7px 18px; font-size: .78rem; box-shadow: 0 4px 16px rgba(0,0,0,.3); display: none; }
+
+/* ── Full detail view (right panel) ─────────────────────────────────────── */
+.json-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; }
+.json-section { margin-bottom: 14px; }
+.json-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin-bottom: 5px; }
+.json-value { font-family: var(--mono); font-size: .8rem; }
+.verdict-accepted   { color: var(--green); font-weight: 700; }
+.verdict-needs_changes { color: var(--red); font-weight: 700; }
+.verdict-ready_for_independent_test { color: var(--blue); font-weight: 700; }
+.verdict-progress   { color: var(--yellow); font-weight: 700; }
+.check-passed { color: var(--green); }
+.check-failed { color: var(--red); }
+.check-blocked, .check-not_run { color: var(--muted); }
+.finding-chip { display: inline-block; background: var(--border); border-radius: 999px;
+  padding: 1px 8px; font-size: .7rem; margin: 2px; }
+.free-body { white-space: pre-wrap; font-family: var(--mono); font-size: .8rem;
+  line-height: 1.6; color: var(--text); }
+
+/* ── Stats sidebar ───────────────────────────────────────────────────────── */
+#stats-sidebar {
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  display: flex; flex-direction: column; min-height: 0; overflow-y: auto;
+}
+.stats-hdr { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.stats-hdr h3 { font-size: .85rem; margin-bottom: 2px; }
+.stats-ts { font-size: .67rem; color: var(--muted); }
+.agent-card { margin: 10px 12px; background: var(--bg);
+  border: 1px solid var(--border); border-top: 3px solid var(--agent-color, var(--border));
+  border-radius: var(--radius); padding: 12px; overflow: hidden; position: relative; }
+.agent-card-hdr { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+.agent-card-hdr .avatar-circle { width: 26px; height: 26px; font-size: .65rem; }
+.agent-name { font-size: .82rem; font-weight: 600; flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-role { font-size: .65rem; padding: 1px 7px; border-radius: 999px; background: var(--border); color: var(--muted); }
+.agent-host { font-size: .67rem; color: var(--muted); margin-bottom: 8px; }
+.agent-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-bottom: 8px; }
+.metric { background: var(--surface); border-radius: 5px; padding: 6px 4px; text-align: center; }
+.metric-val { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.metric-label { font-size: .58rem; color: var(--muted); margin-top: 2px; line-height: 1.2; }
+.agent-last { font-size: .67rem; color: var(--muted); margin-top: 2px; }
+.stats-section { padding: 0 12px 6px; }
+.stats-section h4 { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); padding: 10px 0 6px; border-top: 1px solid var(--border); }
+.stat-row { display: flex; justify-content: space-between; font-size: .72rem;
+  padding: 3px 0; color: var(--muted); }
+.stat-row .val { font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.stats-note { font-size: .67rem; color: var(--muted); padding: 6px 12px 10px; line-height: 1.5; }
+
+/* ── Compose overlay ─────────────────────────────────────────────────────── */
+#compose-overlay { display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.6); z-index: 200; align-items: center; justify-content: center; }
+#compose-overlay.open { display: flex; }
+.compose-card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; width: 540px; max-height: 85vh;
+  overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.compose-card h2 { font-size: .97rem; }
+.compose-card .field label { font-size: .73rem; color: var(--muted); margin-bottom: 4px; display: block; }
+.compose-card select, .compose-card input, .compose-card textarea {
+  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 7px 10px; color: var(--text); }
+.compose-card textarea { min-height: 110px; resize: vertical; font-family: var(--mono); font-size: .8rem; }
+.compose-card select:focus, .compose-card input:focus, .compose-card textarea:focus {
+  outline: none; border-color: var(--accent); }
+.compose-actions { display: flex; gap: 8px; justify-content: flex-end; }
+</style>
 </head>
 <body>
 
+<!-- Header -->
 <header>
-  <h1>⚖ Verdict Bridge</h1>
-  <span id="agent-badge">not connected</span>
-  <button id="refresh-btn" onclick="refresh()">↻ Refresh</button>
+  <div class="brand">
+    <div class="brand-icon">⚖</div>
+    <div>
+      <div class="brand-text">Verdict Bridge</div>
+      <div class="brand-sub">Adversarial multi-agent QA</div>
+    </div>
+  </div>
+  <span id="conn-badge">not connected</span>
+  <span id="updated-at"></span>
+  <div class="hdr-right">
+    <button class="btn btn-ghost" id="refresh-btn" onclick="refresh()">↻</button>
+    <button class="btn btn-primary" id="compose-btn" style="display:none" onclick="openCompose()">+ New</button>
+    <button class="btn btn-ghost" id="logout-btn" style="display:none" onclick="logout()">Logout</button>
+  </div>
 </header>
 
-<!-- Token setup -->
+<!-- Login -->
 <div id="setup">
-  <div id="setup-card">
+  <div class="setup-card">
     <h2>Connect to Bridge</h2>
-    <p>Enter your API token from api-config.json to connect.</p>
-    <input id="token-input" type="password" placeholder="Bearer token" autocomplete="off" />
-    <input id="api-url-input" type="text" placeholder="API URL (default: http://localhost:8765)" />
-    <button onclick="connect()">Connect</button>
+    <p>Enter your API token from <code>api-config.json</code> to open the dashboard.</p>
+    <div class="field">
+      <label>API URL</label>
+      <input id="api-url" type="text" placeholder="http://localhost:8765" />
+    </div>
+    <div class="field">
+      <label>Bearer Token</label>
+      <input id="token-input" type="password" autocomplete="off" placeholder="Your agent token" />
+    </div>
+    <button class="btn btn-primary" style="width:100%;padding:9px" onclick="connect()">Connect</button>
     <span id="setup-error"></span>
   </div>
 </div>
 
-<!-- Main UI -->
-<div id="main">
-  <div class="layout">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-tabs">
-        <button class="tab-btn active" id="tab-inbox" onclick="switchTab('inbox')">Inbox</button>
-        <button class="tab-btn" id="tab-sent" onclick="switchTab('sent')">All</button>
-        <button class="tab-btn" id="tab-tasks" onclick="switchTab('tasks')">Tasks</button>
-      </div>
-      <div class="message-list" id="message-list"></div>
-    </div>
+<!-- App -->
+<div id="app">
 
-    <!-- Detail -->
-    <div class="detail" id="detail">
-      <div class="empty-state" id="empty-state">Select a message</div>
+  <!-- Sidebar: message list + task list -->
+  <div id="sidebar">
+    <div class="sidebar-tabs">
+      <button class="tab active" id="tab-inbox" onclick="switchTab('inbox')">Inbox</button>
+      <button class="tab" id="tab-all" onclick="switchTab('all')">All</button>
+      <button class="tab" id="tab-tasks" onclick="switchTab('tasks')">Tasks</button>
+    </div>
+    <div class="sidebar-filters" id="agent-filters"></div>
+    <div class="sidebar-search">
+      <input type="text" id="search" placeholder="Search…" oninput="renderList()" />
+    </div>
+    <div class="msg-list" id="msg-list"></div>
+  </div>
+
+  <!-- Center: chat view -->
+  <div id="detail">
+    <div class="detail-empty" id="detail-empty">Select a message</div>
+  </div>
+
+  <!-- Stats sidebar -->
+  <div id="stats-sidebar">
+    <div class="stats-hdr">
+      <h3>Team Status</h3>
+      <div class="stats-ts" id="stats-ts">—</div>
+    </div>
+    <div id="agent-cards"></div>
+    <div class="stats-section" id="project-stats-section"></div>
+    <div class="stats-note">
+      Message counts don't confirm model availability.
+      Only the independent tester's <code>test_result</code> closes findings.
     </div>
   </div>
 </div>
 
+<button class="latest-btn" id="latest-btn" onclick="scrollToLatest()">↓ New messages</button>
+
 <!-- Compose overlay -->
 <div id="compose-overlay">
-  <div id="compose-card">
+  <div class="compose-card">
     <h2>New Message</h2>
-    <div class="field-row">
+    <div class="field">
       <label>Recipient</label>
       <select id="c-recipient"></select>
     </div>
-    <div class="field-row">
+    <div class="field">
       <label>Kind</label>
       <select id="c-kind">
         <option>note</option><option>question</option><option>answer</option>
@@ -190,356 +333,461 @@
         <option>fix_ready</option><option>test_result</option>
       </select>
     </div>
-    <div class="field-row">
+    <div class="field">
       <label>Subject</label>
       <input id="c-subject" type="text" />
     </div>
-    <div class="field-row">
+    <div class="field">
       <label>Commit SHA (required for code/test kinds)</label>
       <input id="c-commit" type="text" placeholder="40-char hex" />
     </div>
-    <div class="field-row">
-      <label>Body</label>
-      <textarea id="c-body" placeholder="Free text, or paste JSON for structured handoffs"></textarea>
+    <div class="field">
+      <label>Body (free text, or paste JSON for structured handoffs)</label>
+      <textarea id="c-body"></textarea>
     </div>
     <div class="compose-actions">
       <button class="btn-sm" onclick="closeCompose()">Cancel</button>
-      <button class="btn-sm btn-primary" onclick="sendMessage()">Send</button>
+      <button class="btn-sm primary" onclick="sendMessage()">Send</button>
     </div>
   </div>
 </div>
 
 <script>
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-let TOKEN = localStorage.getItem('vb_token') || '';
-let API_URL = localStorage.getItem('vb_api_url') || 'http://localhost:8765';
-let currentTab = 'inbox';
-let messages = [];
-let tasks = [];
-let selectedId = null;
-let agentInfo = null;
-const AGENTS = ['developer', 'tester'];
-const REPORT_KINDS = new Set(['ready_for_test', 'finding', 'fix_ready', 'test_result']);
+'use strict';
+// ── Config ──────────────────────────────────────────────────────────────────
+const AGENT_COLORS = {
+  codex:          '#208568',
+  claude:         '#a66a38',
+  codex_hetzner:  '#4578ae',
+  claude_hetzner: '#966385',
+  codex_macbook:  '#087b83',
+  claude_macbook:  '#805db0',
+};
+const AGENT_INITIALS = {
+  codex:'Cx', claude:'Cl', codex_hetzner:'CH', claude_hetzner:'EL',
+  codex_macbook:'CM', claude_macbook:'PM',
+};
+const KIND_LABELS = {
+  note:'Note', question:'Question', answer:'Answer',
+  ready_for_test:'Ready for Test', finding:'Finding',
+  fix_ready:'Fix Ready', test_result:'Test Result',
+};
 
-// ---------------------------------------------------------------------------
-// API helpers
-// ---------------------------------------------------------------------------
+// ── State ────────────────────────────────────────────────────────────────────
+let TOKEN = localStorage.getItem('vb_token') || '';
+let API   = localStorage.getItem('vb_api')   || 'http://localhost:8765';
+let agentId = '';
+let messages = new Map();   // seq → msg
+let tasks = [];
+let filterAgent = '';
+let selectedSeq = null;
+let currentTab = 'inbox';
+let replyToId = null;
+let cursor = 0;
+let olderAvailable = true;
+let busy = false;
+let timer = null;
+let statsTimer = null;
+let expandedBubbles = new Set();
+
+// ── API ──────────────────────────────────────────────────────────────────────
 async function api(path, opts = {}) {
-  const r = await fetch(API_URL + path, {
+  const r = await fetch(API + path, {
     headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': 'application/json', ...opts.headers },
-    ...opts,
+    cache: 'no-store', ...opts,
   });
-  if (!r.ok) {
-    const err = await r.json().catch(() => ({ detail: r.statusText }));
-    throw new Error(err.detail || r.statusText);
-  }
+  if (r.status === 401) { logout(); throw new Error('Unauthorized'); }
+  if (!r.ok) { const e = await r.json().catch(() => ({ detail: r.statusText })); throw new Error(e.detail || r.statusText); }
   return r.json();
 }
 
-// ---------------------------------------------------------------------------
-// Connect
-// ---------------------------------------------------------------------------
+// ── Connect / logout ─────────────────────────────────────────────────────────
 async function connect() {
-  const t = document.getElementById('token-input').value.trim();
-  const u = document.getElementById('api-url-input').value.trim();
-  if (u) { API_URL = u; localStorage.setItem('vb_api_url', u); }
-  if (!t) return;
-  TOKEN = t;
+  const token = document.getElementById('token-input').value.trim();
+  const url   = document.getElementById('api-url').value.trim();
+  if (!token) return;
+  TOKEN = token; if (url) API = url;
   try {
-    agentInfo = await api('/api/status');
+    const status = await api('/api/status');
+    agentId = status.agent;
     localStorage.setItem('vb_token', TOKEN);
+    localStorage.setItem('vb_api',   API);
     document.getElementById('setup').style.display = 'none';
-    document.getElementById('main').style.display = 'flex';
-    const badge = document.getElementById('agent-badge');
-    badge.textContent = agentInfo.agent;
-    badge.classList.add('connected');
-    // populate recipient list minus self
-    const sel = document.getElementById('c-recipient');
-    sel.innerHTML = AGENTS.filter(a => a !== agentInfo.agent)
-      .map(a => `<option value="${a}">${a}</option>`).join('');
-    // add compose button to header
-    const hdr = document.querySelector('header');
-    const btn = document.createElement('button');
-    btn.id = 'compose-btn'; btn.className = 'btn-sm btn-primary';
-    btn.style.marginLeft = '8px';
-    btn.textContent = '+ New';
-    btn.onclick = openCompose;
-    hdr.appendChild(btn);
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('conn-badge').textContent = agentId;
+    document.getElementById('conn-badge').classList.add('live');
+    document.getElementById('compose-btn').style.display = '';
+    document.getElementById('logout-btn').style.display = '';
+    buildAgentFilters();
+    buildRecipientSelect();
     await refresh();
+    startPolling();
   } catch(e) {
     const el = document.getElementById('setup-error');
     el.textContent = 'Connection failed: ' + e.message;
     el.style.display = 'block';
   }
 }
-
-// Auto-connect if token stored
+function logout() {
+  TOKEN = ''; localStorage.removeItem('vb_token');
+  clearTimeout(timer); clearTimeout(statsTimer);
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('setup').style.display = 'flex';
+  document.getElementById('conn-badge').textContent = 'not connected';
+  document.getElementById('conn-badge').classList.remove('live');
+  messages.clear(); cursor = 0;
+}
 if (TOKEN) {
+  document.getElementById('api-url').value = API;
   document.getElementById('token-input').value = TOKEN;
-  document.getElementById('api-url-input').value = API_URL;
   connect();
 }
 
-// ---------------------------------------------------------------------------
-// Refresh
-// ---------------------------------------------------------------------------
-async function refresh() {
-  if (!TOKEN) return;
-  try {
-    if (currentTab === 'inbox') await loadInbox();
-    else if (currentTab === 'sent') await loadAll();
-    else await loadTasks();
-    agentInfo = await api('/api/status');
-  } catch(e) { console.warn('refresh failed', e); }
+// ── Agent chips ───────────────────────────────────────────────────────────────
+function buildAgentFilters() {
+  const el = document.getElementById('agent-filters');
+  const agents = ['', ...Object.keys(AGENT_COLORS)];
+  el.innerHTML = agents.map(id => {
+    const color = AGENT_COLORS[id] || '';
+    const label = id || 'All';
+    return `<button class="agent-chip${id===filterAgent?' active':''}"
+      data-agent="${id}" onclick="setFilter('${id}')">
+      ${id ? `<span class="dot" style="background:${color}"></span>` : ''}${label}</button>`;
+  }).join('');
+}
+function setFilter(id) {
+  filterAgent = id;
+  document.querySelectorAll('.agent-chip').forEach(b => b.classList.toggle('active', b.dataset.agent === id));
+  renderList();
+}
+function buildRecipientSelect() {
+  const sel = document.getElementById('c-recipient');
+  sel.innerHTML = Object.keys(AGENT_COLORS)
+    .filter(a => a !== agentId)
+    .map(a => `<option value="${a}">${a}</option>`).join('');
 }
 
-async function loadInbox() {
-  const data = await api('/api/inbox?unread_only=false&limit=20');
-  messages = data.messages || [];
-  renderMessageList();
-}
-
-async function loadAll() {
-  const data = await api('/api/inbox?unread_only=false&limit=20');
-  messages = data.messages || [];
-  renderMessageList();
-}
-
-async function loadTasks() {
-  const data = await api('/api/tasks?limit=50');
-  tasks = data.tasks || [];
-  renderTaskList();
-}
-
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
+// ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(tab) {
   currentTab = tab;
-  ['inbox','sent','tasks'].forEach(t => {
-    document.getElementById('tab-' + t).classList.toggle('active', t === tab);
-  });
-  selectedId = null;
-  document.getElementById('detail').innerHTML = '<div class="empty-state" id="empty-state">Select an item</div>';
-  refresh();
+  ['inbox','all','tasks'].forEach(t => document.getElementById('tab-' + t).classList.toggle('active', t === tab));
+  if (tab === 'tasks') loadTasks();
+  else renderList();
 }
 
-function kindClass(k) { return 'kind-' + (k || 'note'); }
+// ── Poll ──────────────────────────────────────────────────────────────────────
+function startPolling() {
+  clearTimeout(timer); clearTimeout(statsTimer);
+  schedulePoll(); scheduleStats();
+}
+function schedulePoll() { timer = setTimeout(() => { poll().finally(schedulePoll); }, 3000); }
+function scheduleStats() { statsTimer = setTimeout(() => { pollStats().finally(scheduleStats); }, 10000); }
 
-function renderMessageList() {
-  const el = document.getElementById('message-list');
-  if (!messages.length) { el.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:.82rem">No messages</div>'; return; }
-  el.innerHTML = messages.map(m => {
-    const unread = !m.acknowledged_at ? ' unread' : '';
-    const dot = !m.acknowledged_at ? '<span class="unread-dot"></span>' : '';
-    const preview = m.preview || m.body || '';
-    const date = new Date(m.created_at).toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    return `<div class="msg-item${unread}${selectedId===m.id?' selected':''}" onclick="selectMessage('${m.id}')">
-      <div class="msg-meta">
-        ${dot}
-        <span class="kind-badge ${kindClass(m.kind)}">${m.kind}</span>
-        <span style="font-size:.72rem;color:var(--muted);margin-left:auto">${date}</span>
-      </div>
-      <div class="msg-subject">${esc(m.subject)}</div>
-      <div class="msg-preview">${esc(preview)}</div>
-    </div>`;
-  }).join('');
+async function refresh() {
+  await poll(true);
+  await pollStats();
+}
+async function poll(initial = false) {
+  if (busy) return;
+  busy = true;
+  try {
+    const viewport = document.getElementById('detail');
+    const atBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 80;
+    const url = initial ? '/api/inbox?unread_only=false&limit=20' : `/api/inbox?unread_only=false&limit=20&after_seq=${cursor}`;
+    const data = await api(url);
+    let hasNew = false;
+    for (const m of (data.messages || [])) {
+      if (!messages.has(m.seq)) hasNew = true;
+      messages.set(m.seq, m);
+      cursor = Math.max(cursor, m.seq);
+    }
+    olderAvailable = data.has_more ?? false;
+    if (initial) olderAvailable = data.has_more ?? false;
+    if (currentTab !== 'tasks') renderList();
+    const badge = document.getElementById('conn-badge');
+    badge.textContent = agentId + ' · ' + messages.size + ' msgs';
+    badge.classList.add('live');
+    document.getElementById('updated-at').textContent =
+      new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    if (hasNew && !atBottom) document.getElementById('latest-btn').style.display = '';
+    else if (atBottom) scrollToLatest();
+  } catch(e) {
+    document.getElementById('conn-badge').textContent = 'reconnecting…';
+  } finally { busy = false; }
+}
+async function pollStats() {
+  try {
+    const data = await api('/api/status');
+    renderStats(data);
+    document.getElementById('stats-ts').textContent =
+      'Updated ' + new Date().toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
+  } catch(_) {}
+}
+async function loadTasks() {
+  try {
+    const data = await api('/api/tasks?limit=50');
+    tasks = data.tasks || [];
+    renderTaskList();
+  } catch(e) { document.getElementById('msg-list').innerHTML = `<div class="empty-list">${esc(e.message)}</div>`; }
+}
+
+// ── Render message list ────────────────────────────────────────────────────────
+function renderList() {
+  if (currentTab === 'tasks') { renderTaskList(); return; }
+  const query = document.getElementById('search').value.toLowerCase();
+  const unreadOnly = currentTab === 'inbox';
+  const sorted = [...messages.values()].sort((a,b) => a.seq - b.seq).filter(m => {
+    if (unreadOnly && m.acknowledged_at) return false;
+    if (filterAgent && m.sender !== filterAgent && m.recipient !== filterAgent) return false;
+    if (query && !(m.subject + ' ' + (m.preview||'')).toLowerCase().includes(query)) return false;
+    return true;
+  });
+  const el = document.getElementById('msg-list');
+  if (!sorted.length) { el.innerHTML = '<div class="empty-list">No messages</div>'; return; }
+  let lastDay = '';
+  el.innerHTML = (olderAvailable ? '<button class="load-older" onclick="loadOlder()">Load older messages</button>' : '') +
+    sorted.map(m => {
+      const day = new Date(m.created_at).toLocaleDateString(undefined, {weekday:'short',month:'short',day:'numeric'});
+      const daySep = day !== lastDay ? `<div class="day-sep">${esc(day)}</div>` : '';
+      lastDay = day;
+      const time = new Date(m.created_at).toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+      const unread = !m.acknowledged_at && m.recipient === agentId;
+      const color = AGENT_COLORS[m.sender] || '';
+      return daySep + `<div class="msg-item${unread?' unread':''}${selectedSeq===m.seq?' selected':''}"
+        onclick="selectMsg(${m.seq})">
+        <div class="msg-item-meta">
+          ${unread ? '<span class="unread-dot"></span>' : ''}
+          <span class="kind-badge kind-${m.kind}">${m.kind}</span>
+          <span style="font-size:.67rem;color:${color};margin-left:2px">${esc(m.sender)}</span>
+          <span style="font-size:.65rem;color:var(--muted);margin-left:auto">${time}</span>
+        </div>
+        <div class="msg-subject">${esc(m.subject)}</div>
+        <div class="msg-preview">${esc(m.preview||'')}</div>
+      </div>`;
+    }).join('');
 }
 
 function renderTaskList() {
-  const el = document.getElementById('message-list');
-  if (!tasks.length) { el.innerHTML = '<div style="padding:20px;color:var(--muted);font-size:.82rem">No tasks</div>'; return; }
+  const el = document.getElementById('msg-list');
+  if (!tasks.length) { el.innerHTML = '<div class="empty-list">No tasks</div>'; return; }
   el.innerHTML = tasks.map(t => `
     <div class="task-item">
       <div class="task-id">${esc(t.task_id)}</div>
-      <div class="task-meta">
+      <div class="task-row">
         <span class="status-badge status-${t.status}">${t.status}</span>
-        <span>${t.kind}</span>
-        <span>${t.desk_id || ''}</span>
+        <span>${esc(t.kind)}</span>
+        <span>${esc(t.desk_id||'')}</span>
       </div>
-      <div style="font-size:.72rem;color:var(--muted);margin-top:3px">${esc(t.commit_sha?.slice(0,12) || '')}</div>
-    </div>
-  `).join('');
+      <div style="font-size:.65rem;color:var(--muted);margin-top:2px">${esc((t.commit_sha||'').slice(0,12))}</div>
+    </div>`).join('');
 }
 
-// ---------------------------------------------------------------------------
-// Message detail
-// ---------------------------------------------------------------------------
-async function selectMessage(id) {
-  selectedId = id;
-  renderMessageList();
-  const detail = document.getElementById('detail');
-  detail.innerHTML = '<div class="empty-state">Loading…</div>';
+// ── Select & load message ─────────────────────────────────────────────────────
+async function selectMsg(seq) {
+  selectedSeq = seq;
+  renderList();
+  const preview = messages.get(seq);
+  if (!preview) return;
   try {
-    const msg = await api('/api/messages/' + id);
-    renderDetail(detail, msg);
+    const msg = await api('/api/messages/' + preview.id);
+    messages.set(seq, { ...preview, ...msg });
+    renderDetail(msg);
   } catch(e) {
-    detail.innerHTML = `<div class="empty-state" style="color:var(--red)">${esc(e.message)}</div>`;
+    document.getElementById('detail').innerHTML = `<div class="detail-empty" style="color:var(--red)">${esc(e.message)}</div>`;
   }
 }
 
-function renderDetail(el, msg) {
+// ── Detail render ─────────────────────────────────────────────────────────────
+function renderDetail(msg) {
+  const el = document.getElementById('detail');
+  const acked = msg.acknowledged_at;
+  const color = AGENT_COLORS[msg.sender] || 'var(--border)';
   const date = new Date(msg.created_at).toLocaleString();
-  const ackDate = msg.acknowledged_at ? new Date(msg.acknowledged_at).toLocaleString() : null;
   const body = msg.body || '';
-
-  // Try structured JSON
   let structured = null;
-  try {
-    const parsed = JSON.parse(body);
-    if (parsed && parsed.protocol) structured = parsed;
-  } catch(_) {}
+  try { const p = JSON.parse(body); if (p && p.protocol) structured = p; } catch(_) {}
 
   el.innerHTML = `
-    <div class="detail-header">
+    <div class="detail-hdr">
       <h2>${esc(msg.subject)}</h2>
       <div class="detail-meta">
-        <span><span class="kind-badge ${kindClass(msg.kind)}">${msg.kind}</span></span>
-        <span>from <b>${msg.sender}</b> → <b>${msg.recipient}</b></span>
+        <span class="kind-badge kind-${msg.kind}">${msg.kind}</span>
+        <span>from <b style="color:${color}">${esc(msg.sender)}</b> → <b>${esc(msg.recipient)}</b></span>
         <span>${date}</span>
         ${msg.commit_sha ? `<span class="sha">⎇ ${msg.commit_sha.slice(0,12)}</span>` : ''}
-        ${ackDate ? `<span style="color:var(--green)">✓ acked ${ackDate}</span>` : ''}
+        ${acked ? `<span style="color:var(--green)">✓ acked</span>` : ''}
       </div>
     </div>
     <div class="detail-actions">
-      ${!msg.acknowledged_at ? `<button class="btn-sm btn-primary" onclick="ack('${msg.id}')">Acknowledge</button>` : ''}
-      <button class="btn-sm" onclick="reply('${msg.id}', '${esc(msg.sender)}')">Reply</button>
-      ${msg.thread_id ? `<button class="btn-sm" onclick="loadThread('${msg.thread_id}')">View Thread</button>` : ''}
+      ${!acked && msg.recipient === agentId
+        ? `<button class="btn-sm primary" onclick="ackMsg('${msg.id}')">Acknowledge</button>` : ''}
+      <button class="btn-sm" onclick="replyTo('${msg.id}','${esc(msg.sender)}')">Reply</button>
+      ${msg.thread_id ? `<button class="btn-sm" onclick="viewThread('${msg.thread_id}')">Thread</button>` : ''}
     </div>
-    <div class="detail-body">
-      ${structured ? renderStructured(structured) : `<div class="body-text">${esc(body)}</div>`}
-    </div>
-  `;
+    <div id="detail-scroll" style="flex:1;overflow-y:auto;padding:20px">
+      ${structured ? renderStructured(structured) : `<div class="free-body">${esc(body)}</div>`}
+    </div>`;
 }
 
-function renderStructured(data) {
-  const verdict = data.verdict || '';
-  const findings = (data.findings || []);
-  const closed = new Set(data.closed_findings || []);
-  return `<div class="body-json">
-    <div class="json-section">
-      <div class="json-label">Protocol</div>
-      <div class="json-value" style="color:var(--muted)">${esc(data.protocol)}</div>
-    </div>
-    <div class="json-section">
-      <div class="json-label">Summary</div>
-      <div class="json-value">${esc(data.summary)}</div>
-    </div>
-    ${data.task_id ? `<div class="json-section">
-      <div class="json-label">Task</div>
-      <div class="json-value sha">${esc(data.task_id)}${data.desk_id ? ' / ' + esc(data.desk_id) : ''}</div>
-    </div>` : ''}
+function renderStructured(d) {
+  const verdict = d.verdict || '';
+  const findings = d.findings || [];
+  const closed = new Set(d.closed_findings || []);
+  return `<div class="json-card">
+    ${d.summary ? `<div class="json-section">
+      <div class="json-label">Summary</div><div class="json-value">${esc(d.summary)}</div></div>` : ''}
     <div class="json-section">
       <div class="json-label">Verdict</div>
-      <div class="json-value verdict-${verdict} " style="font-weight:700">${verdict}</div>
+      <div class="json-value verdict-${verdict}">${esc(verdict)}</div>
     </div>
+    ${d.task_id ? `<div class="json-section">
+      <div class="json-label">Task</div>
+      <div class="json-value" style="font-family:var(--mono);font-size:.75rem">${esc(d.task_id)}</div></div>` : ''}
     ${findings.length ? `<div class="json-section">
-      <div class="json-label">Findings (${findings.length})</div>
-      <div>${findings.map(f => `<span class="finding-tag" style="${closed.has(f)?'text-decoration:line-through;opacity:.5':''}">${esc(f)}</span>`).join('')}</div>
+      <div class="json-label">Findings</div>
+      <div>${findings.map(f=>`<span class="finding-chip"${closed.has(f)?' style="opacity:.4;text-decoration:line-through"':''}>${esc(f)}</span>`).join('')}</div>
     </div>` : ''}
-    ${(data.changes||[]).length ? `<div class="json-section">
+    ${(d.changes||[]).length ? `<div class="json-section">
       <div class="json-label">Changes</div>
-      ${data.changes.map(c => `<div class="json-value" style="margin-bottom:4px">
-        <span class="sha">${esc(c.path)}</span> · <span style="color:var(--text)">${esc(c.function)}</span>
-        ${c.finding_ids.map(f=>`<span class="finding-tag">${esc(f)}</span>`).join('')}
-      </div>`).join('')}
+      ${d.changes.map(c=>`<div style="font-size:.78rem;margin-bottom:5px">
+        <span style="color:var(--muted);font-family:var(--mono)">${esc(c.path)}</span> · ${esc(c.function)}
+        ${c.finding_ids.map(f=>`<span class="finding-chip">${esc(f)}</span>`).join('')}</div>`).join('')}
     </div>` : ''}
-    ${(data.checks||[]).length ? `<div class="json-section">
+    ${(d.checks||[]).length ? `<div class="json-section">
       <div class="json-label">Checks</div>
-      ${data.checks.map(c => `<div class="json-value check-${c.status}" style="margin-bottom:6px">
-        ${c.status === 'passed' ? '✓' : c.status === 'failed' ? '✗' : '○'}
+      ${d.checks.map(c=>`<div class="check-${c.status}" style="margin-bottom:7px;font-size:.78rem">
+        ${c.status==='passed'?'✓':c.status==='failed'?'✗':'○'}
         <b>${esc(c.level)}</b> · ${esc(c.scenario_id)}
-        ${c.limitations?.length ? `<span style="color:var(--yellow);font-size:.75rem"> ⚠ ${c.limitations.join('; ')}</span>` : ''}
-        ${c.evidence?.length ? `<div style="font-size:.72rem;color:var(--muted);padding-left:16px">${c.evidence.map(esc).join('<br/>')}</div>` : ''}
+        ${c.limitations?.length?`<span style="color:var(--yellow);font-size:.7rem"> ⚠ ${c.limitations.join('; ')}</span>`:''}
+        ${c.evidence?.length?`<div style="font-size:.67rem;color:var(--muted);padding-left:14px">${c.evidence.map(esc).join('<br/>')}</div>`:''}
       </div>`).join('')}
     </div>` : ''}
-    ${(data.remaining||[]).length ? `<div class="json-section">
+    ${(d.remaining||[]).length ? `<div class="json-section">
       <div class="json-label">Remaining Scope</div>
-      ${data.remaining.map(r=>`<div class="json-value" style="color:var(--yellow);font-size:.8rem">• ${esc(r)}</div>`).join('')}
+      ${d.remaining.map(r=>`<div style="color:var(--yellow);font-size:.76rem">• ${esc(r)}</div>`).join('')}
     </div>` : ''}
-    ${data.next_owner ? `<div class="json-section">
+    ${d.next_owner ? `<div class="json-section">
       <div class="json-label">Next Owner</div>
-      <div class="json-value" style="color:var(--accent)">${esc(data.next_owner)}</div>
+      <div class="json-value" style="color:var(--accent)">${esc(d.next_owner)}</div>
     </div>` : ''}
   </div>`;
 }
 
-// ---------------------------------------------------------------------------
-// Actions
-// ---------------------------------------------------------------------------
-async function ack(id) {
+// ── Acknowledge ────────────────────────────────────────────────────────────────
+async function ackMsg(id) {
   try {
     await api('/api/messages/' + id + '/acknowledge', { method: 'POST' });
-    await selectMessage(id);
-    await loadInbox();
+    const m = [...messages.values()].find(m => m.id === id);
+    if (m) { m.acknowledged_at = new Date().toISOString(); messages.set(m.seq, m); }
+    await selectMsg(selectedSeq);
+    renderList();
   } catch(e) { alert('Failed: ' + e.message); }
 }
 
-let replyToId = null;
-function reply(id, sender) {
-  replyToId = id;
-  openCompose();
-  const sel = document.getElementById('c-recipient');
-  for (let i = 0; i < sel.options.length; i++) {
-    if (sel.options[i].value === sender) { sel.selectedIndex = i; break; }
-  }
-  document.getElementById('c-kind').value = 'answer';
+// ── Thread ────────────────────────────────────────────────────────────────────
+async function viewThread(threadId) {
+  try {
+    const data = await api('/api/threads/' + threadId + '?limit=20');
+    for (const m of (data.messages||[])) if (!messages.has(m.seq)) messages.set(m.seq, m);
+    renderList();
+  } catch(e) { alert('Failed: ' + e.message); }
 }
 
-async function loadThread(threadId) {
-  const data = await api('/api/threads/' + threadId);
-  const msgs = data.messages || [];
-  const list = document.getElementById('message-list');
-  list.innerHTML = `<div style="padding:8px 14px;font-size:.72rem;color:var(--accent)">Thread (${msgs.length})</div>` +
-    msgs.map(m => {
-      const date = new Date(m.created_at).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
-      return `<div class="msg-item${selectedId===m.id?' selected':''}" onclick="selectMessage('${m.id}')">
-        <div class="msg-meta"><span class="kind-badge ${kindClass(m.kind)}">${m.kind}</span>
-          <span style="font-size:.72rem;color:var(--muted);margin-left:auto">${date}</span></div>
-        <div class="msg-subject">${esc(m.subject)}</div></div>`;
-    }).join('');
+// ── Load older ────────────────────────────────────────────────────────────────
+async function loadOlder() {
+  if (!messages.size) return;
+  const minSeq = Math.min(...messages.keys());
+  try {
+    const data = await api(`/api/inbox?unread_only=false&limit=20&after_seq=0`);
+    for (const m of (data.messages||[])) if (m.seq < minSeq) messages.set(m.seq, m);
+    olderAvailable = false;
+    renderList();
+  } catch(e) { alert('Failed: ' + e.message); }
 }
 
-// ---------------------------------------------------------------------------
-// Compose
-// ---------------------------------------------------------------------------
+// ── Scroll ────────────────────────────────────────────────────────────────────
+function scrollToLatest() {
+  const el = document.getElementById('detail');
+  el.scrollTop = el.scrollHeight;
+  document.getElementById('latest-btn').style.display = 'none';
+}
+
+// ── Compose / Send ────────────────────────────────────────────────────────────
 function openCompose() { document.getElementById('compose-overlay').classList.add('open'); }
 function closeCompose() {
   document.getElementById('compose-overlay').classList.remove('open');
   replyToId = null;
-  ['c-subject','c-commit','c-body'].forEach(id => document.getElementById(id).value = '');
+  ['c-subject','c-commit','c-body'].forEach(id => document.getElementById(id).value='');
 }
-
+function replyTo(id, sender) {
+  replyToId = id;
+  openCompose();
+  const sel = document.getElementById('c-recipient');
+  for (let i = 0; i < sel.options.length; i++)
+    if (sel.options[i].value === sender) { sel.selectedIndex = i; break; }
+  document.getElementById('c-kind').value = 'answer';
+}
 async function sendMessage() {
   const recipient = document.getElementById('c-recipient').value;
-  const kind = document.getElementById('c-kind').value;
-  const subject = document.getElementById('c-subject').value.trim();
+  const kind      = document.getElementById('c-kind').value;
+  const subject   = document.getElementById('c-subject').value.trim();
   const commit_sha = document.getElementById('c-commit').value.trim();
-  const body = document.getElementById('c-body').value;
-  if (!recipient || !subject || !body) { alert('Recipient, subject and body are required.'); return; }
+  const body      = document.getElementById('c-body').value;
+  if (!subject || !body) { alert('Subject and body are required.'); return; }
   const idempotency_key = 'ui-' + Date.now() + '-' + Math.random().toString(36).slice(2);
   try {
-    await api('/api/messages', {
-      method: 'POST',
-      body: JSON.stringify({ recipient, kind, subject, body, idempotency_key, commit_sha,
-                             reply_to: replyToId || '' }),
-    });
+    await api('/api/messages', { method:'POST', body: JSON.stringify(
+      { recipient, kind, subject, body, idempotency_key, commit_sha, reply_to: replyToId||'' }
+    )});
     closeCompose();
-    await refresh();
+    await poll(true);
   } catch(e) { alert('Send failed: ' + e.message); }
 }
 
-// ---------------------------------------------------------------------------
-// Utils
-// ---------------------------------------------------------------------------
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function renderStats(status) {
+  const el = document.getElementById('agent-cards');
+  const agents = Object.keys(AGENT_COLORS);
+  // Build per-agent counts from our message cache
+  const counts = {};
+  for (const a of agents) counts[a] = { sent: 0, recv: 0 };
+  for (const m of messages.values()) {
+    if (counts[m.sender]) counts[m.sender].sent++;
+    if (counts[m.recipient]) counts[m.recipient].recv++;
+  }
+  el.innerHTML = agents.map(id => {
+    const color = AGENT_COLORS[id];
+    const init  = AGENT_INITIALS[id] || id.slice(0,2).toUpperCase();
+    const info  = { codex:'tester', claude:'developer', codex_hetzner:'tester',
+                    claude_hetzner:'developer', codex_macbook:'tester', claude_macbook:'developer' };
+    const host  = id.endsWith('_hetzner') ? 'hetzner' : id.endsWith('_macbook') ? 'macbook' : 'local';
+    const role  = info[id] || '';
+    const c = counts[id];
+    const isSelf = id === agentId;
+    return `<div class="agent-card${isSelf?' self-card':''}" style="--agent-color:${color}">
+      <div class="agent-card-hdr">
+        <div class="avatar-circle" style="--agent-color:${color}">${init}</div>
+        <span class="agent-name">${esc(id)}</span>
+        <span class="agent-role">${role}</span>
+      </div>
+      <div class="agent-host">${host}${isSelf?' · <b>you</b>':''}</div>
+      <div class="agent-metrics">
+        <div class="metric"><div class="metric-val">${c.sent}</div><div class="metric-label">Sent</div></div>
+        <div class="metric"><div class="metric-val">${c.recv}</div><div class="metric-label">Received</div></div>
+        <div class="metric"><div class="metric-val">${c.recv>0&&!messages.size?'–':([...messages.values()].filter(m=>m.recipient===id&&!m.acknowledged_at).length)}</div><div class="metric-label">Unread</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Auto-refresh every 30s
-setInterval(() => { if (TOKEN) refresh(); }, 30000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && TOKEN) refresh();
+});
 </script>
 </body>
 </html>

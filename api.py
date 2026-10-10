@@ -123,7 +123,7 @@ def create_app(config: dict, state_dir: Path = Path(DEFAULT_STATE)) -> FastAPI:
     app = FastAPI(
         title="Verdict Bridge",
         description="Adversarial multi-agent QA protocol REST API",
-        version="1.1.0",
+        version="1.2.0",
         docs_url="/api/docs",
         redoc_url="/api/redoc",
         openapi_url="/api/openapi.json",
@@ -239,6 +239,15 @@ def create_app(config: dict, state_dir: Path = Path(DEFAULT_STATE)) -> FastAPI:
             task_id, req.lease_token, req.checkpoint_revision,
             req.progress, req.status, req.handoff_id, req.lease_seconds,
         )
+
+    @app.get("/api/events", tags=["push"])
+    def get_events(
+        after_seq: int = Query(0, ge=0),
+        limit: int = Query(20, ge=1, le=20),
+        store: Store = Depends(get_store),
+    ):
+        """Wake events for this agent — poll after receiving a push hint."""
+        return wrap(store.events, after_seq, limit)
 
     @app.get("/", include_in_schema=False)
     def root():

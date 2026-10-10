@@ -131,6 +131,25 @@ Enforcement is opt-in via `handoff-policy.json`. Free-text bodies remain valid f
 
 See [HANDOFFS.md](HANDOFFS.md) for the full protocol reference.
 
+## What's New in v1.2 — Push Transport, 6 Agents, Dashboard
+
+**Push transport (`push_transport.py`):**
+- `bridge_wake_events` table + SQLite triggers auto-insert wake events on new messages and task assignments
+- Unix datagram socket hints — agents receive a non-blocking `wake` datagram after commit
+- `store.events(after_seq, limit)` — poll for new work signals; exposed at `GET /api/events`
+- Missed datagrams are harmless: SQLite is the authoritative source of truth
+
+**6 agents across 3 hosts:**
+- Added `codex_macbook` (tester) and `claude_macbook` (developer)
+- Schema v2 → v3 migration is automatic; creates a backup before schema change
+- All SQL constraints, indexes, and triggers are preserved across migration
+
+**Revamped dashboard:**
+- Chat-bubble layout — developer messages right, tester messages left
+- Per-agent stat cards with sent/received/unread counts
+- Filter by agent, full-text search
+- Structured handoff renderer with color-coded verdicts, check levels, evidence
+
 ## Quickstart
 
 ### Requirements
@@ -173,7 +192,18 @@ python3 bridge.py --agent developer inbox
 
 ## Agents
 
-Configure up to 4 agents per project (2 developers, 2 testers). Agents are identified by role — you choose which model fills each role. The bridge enforces that testers and developers are always different agents.
+Configure up to 6 agents per project across up to 3 hosts:
+
+| Agent ID | Role | Default host |
+|---|---|---|
+| `codex` | tester | local |
+| `claude` | developer | local |
+| `codex_hetzner` | tester | hetzner |
+| `claude_hetzner` | developer | hetzner |
+| `codex_macbook` | tester | macbook |
+| `claude_macbook` | developer | macbook |
+
+Agents are identified by ID — you choose which model fills each role. The bridge enforces that testers and developers are always different agents. For remote hosts, configure `location.json` to point agents to the central SQLite database via SSH RPC.
 
 ## Architecture
 
@@ -186,14 +216,18 @@ Schema versioning and automatic migration are built in.
 | File | Purpose |
 |---|---|
 | `bridge.py` | Core broker — message store, task leases, MCP server |
-| `handoff_contract.py` | Structured body validator (v1.1) |
+| `handoff_contract.py` | Structured body validator |
 | `handoff-contract-v1.schema.json` | JSON Schema for report bodies |
 | `handoff-policy.json` | Opt-in enforcement config (create to enable) |
+| `push_transport.py` | Unix socket wake hints + `bridge_wake_events` table |
+| `api.py` | REST API — FastAPI wrapper over all Store methods |
+| `dashboard/index.html` | Web dashboard — chat view, agent stats, compose |
 | `HANDOFFS.md` | Full protocol reference |
 
 ## Roadmap
 
 - [ ] PostgreSQL backend for multi-tenant SaaS
+- [ ] Unix socket server mode (persistent process, no per-call startup cost)
 - [x] REST API (`api.py` — FastAPI, Bearer auth, all Store methods)
 - [x] Web dashboard (`dashboard/index.html` — dark mode, structured handoff renderer, compose UI)
 - [ ] Pluggable model connectors (Claude, GPT, Gemini, Ollama)
